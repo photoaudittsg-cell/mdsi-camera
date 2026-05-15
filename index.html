@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>MDSI Camera</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0B0F1A;color:#E8EDF5;font-family:sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:16px;padding:20px}
+h2{color:#00C896;font-size:18px;letter-spacing:1px}
+#video{width:100%;max-width:520px;border-radius:10px;background:#000;border:2px solid #243050}
+.btns{display:flex;gap:10px;width:100%;max-width:520px}
+button{flex:1;padding:12px;border-radius:8px;border:none;cursor:pointer;font-size:14px;font-weight:600;transition:opacity .15s}
+button:active{opacity:.8}
+#capture-btn{background:#00C896;color:#000}
+#flip-btn{background:#1A2340;color:#E8EDF5;border:1px solid #2E3F5A;flex:0 0 100px}
+#status{font-size:12px;color:#607080;min-height:18px;text-align:center}
+#preview{width:100%;max-width:520px;border-radius:8px;display:none;border:2px solid #00C896}
+#send-btn{width:100%;max-width:520px;padding:12px;border-radius:8px;border:none;background:#00C896;color:#000;font-size:14px;font-weight:600;cursor:pointer;display:none}
+canvas{display:none}
+</style>
+</head>
+<body>
+<h2>MDSI · Camera Capture</h2>
+<video id="video" autoplay playsinline></video>
+<div class="btns">
+  <button id="capture-btn" onclick="capture()">📷 Capture</button>
+  <button id="flip-btn" onclick="flip()">🔄 Flip</button>
+</div>
+<img id="preview"/>
+<button id="send-btn" onclick="sendPhoto()">✓ Use This Photo</button>
+<div id="status">Starting camera...</div>
+<canvas id="canvas"></canvas>
+
+<script>
+var stream, facing = 'environment', capturedDataUrl = null;
+var TARGET_ORIGIN = '*'; // locked down in sendPhoto
+
+function start() {
+  if (stream) { stream.getTracks().forEach(function(t){t.stop();}); }
+  navigator.mediaDevices.getUserMedia({video:{facingMode:facing,width:{ideal:1920},height:{ideal:1080}},audio:false})
+    .then(function(s){
+      stream = s;
+      document.getElementById('video').srcObject = s;
+      document.getElementById('status').textContent = 'Camera ready — click Capture';
+    })
+    .catch(function(e){
+      document.getElementById('status').textContent = 'Camera error: ' + e.message;
+    });
+}
+
+function flip() {
+  facing = facing === 'environment' ? 'user' : 'environment';
+  start();
+}
+
+function capture() {
+  var v = document.getElementById('video');
+  var c = document.getElementById('canvas');
+  c.width = v.videoWidth;
+  c.height = v.videoHeight;
+  c.getContext('2d').drawImage(v,0,0);
+  capturedDataUrl = c.toDataURL('image/jpeg', 0.88);
+  var prev = document.getElementById('preview');
+  prev.src = capturedDataUrl;
+  prev.style.display = 'block';
+  document.getElementById('send-btn').style.display = 'block';
+  document.getElementById('status').textContent = 'Photo captured — click Use This Photo or capture again';
+}
+
+function sendPhoto() {
+  if (!capturedDataUrl) return;
+  var filename = 'CAP_' + Date.now() + '.jpg';
+  // Post to opener (the Apps Script app) then close
+  if (window.opener) {
+    window.opener.postMessage({
+      type: 'MDSI_CAPTURE',
+      dataUrl: capturedDataUrl,
+      filename: filename
+    }, '*');
+    document.getElementById('status').textContent = 'Photo sent! You can capture another or close this window.';
+    // Reset for next shot
+    capturedDataUrl = null;
+    document.getElementById('preview').style.display = 'none';
+    document.getElementById('send-btn').style.display = 'none';
+  } else {
+    document.getElementById('status').textContent = 'Error: no opener window found. Open this from the MDSI app.';
+  }
+}
+
+start();
+</script>
+</body>
+</html>
